@@ -1,6 +1,4 @@
-# README
 ## forestbeetleMBC - A nextflow pipeline for processing DNA metabarcoding amplicon sequences
-
 forestbeetleMBC automates the pipeline with [Nextflow](https://www.nextflow.io/). 
 
 ## Usage
