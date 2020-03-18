@@ -9,3 +9,4 @@ nextflow run forestbeetleMBC_CO1.nf
 **[Cutadapt](https://cutadapt.readthedocs.io/en/stable/index.html)**<br />
 **[FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)**<br />
 **[MultiQC](https://multiqc.info/)**<br />
+**[LULU](https://github.com/tobiasgf/lulu) - R package**
