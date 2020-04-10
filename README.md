@@ -1,8 +1,8 @@
-## nf4MBC - A nextflow pipeline for processing DNA metabarcoding amplicon sequences
+## nfp4MBC - A **n**ext**f**low pipeline for **M**eta**b**ar**c**oding 
 forestbeetleMBC automates the pipeline with [Nextflow](https://www.nextflow.io/). 
 
 ## Usage
-nextflow run nf4MBC.nf
+nextflow run nfp4MBC.nf
 
 ## Dependencies
 **[usearch](https://www.drive5.com/usearch/)**<br />
