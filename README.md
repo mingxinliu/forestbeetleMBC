@@ -1,12 +1,12 @@
-## forestbeetleMBC - A nextflow pipeline for processing DNA metabarcoding amplicon sequences
+## nf4MBC - A nextflow pipeline for processing DNA metabarcoding amplicon sequences
 forestbeetleMBC automates the pipeline with [Nextflow](https://www.nextflow.io/). 
 
 ## Usage
-nextflow run forestbeetleMBC_CO1.nf
+nextflow run nf4MBC.nf
 
 ## Dependencies
-**[Usearch](https://www.drive5.com/usearch/)**<br />
-**[Cutadapt](https://cutadapt.readthedocs.io/en/stable/index.html)**<br />
-**[FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)**<br />
-**[MultiQC](https://multiqc.info/)**<br />
-**[LULU](https://github.com/tobiasgf/lulu) - R package**
+**[usearch](https://www.drive5.com/usearch/)**<br />
+**[cutadapt](https://cutadapt.readthedocs.io/en/stable/index.html)**<br />
+**[fastqc](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)**<br />
+**[multiqc](https://multiqc.info/)**<br />
+**[lulu](https://github.com/tobiasgf/lulu) - R package**
