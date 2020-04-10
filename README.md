@@ -1,5 +1,5 @@
-## nfp4MBC - A **n**ext**f**low pipeline for **M**eta**b**ar**c**oding 
-forestbeetleMBC automates the pipeline with [Nextflow](https://www.nextflow.io/). 
+## nfp4MBC - A *n*ext*f*low *p*ipeline for *M*eta*b*ar*c*oding 
+nfp4MBC automates the pipeline with [Nextflow](https://www.nextflow.io/). 
 
 ## Usage
 nextflow run nfp4MBC.nf
