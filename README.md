@@ -1,4 +1,4 @@
-## nfp4MBC - A *n*ext*f*low *p*ipeline for *M*eta*b*ar*c*oding 
+## nfp4MBC - A nextflow pipeline for Metabarcoding 
 nfp4MBC automates the pipeline with [Nextflow](https://www.nextflow.io/). 
 
 ## Usage
