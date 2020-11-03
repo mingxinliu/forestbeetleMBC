@@ -1,0 +1,566 @@
+---
+title: "Landscape modeling"
+author: "Mingxin Liu"
+date: "18 June 2020"
+output: html_document
+---
+## load library
+```{r setup, include=FALSE}
+library(easypackages)
+libraries("tidyverse", "ggplot2", "vegan", "lulu", "rgdal", "raster", "mvabund", "boral", "landscapemetrics", "rgeos", "SDMTools", "scales", "data.table", "gdm", "gradientForest", "sf", "Hmisc", "corrplot", "ade4")
+setwd("C:/UTAS/MS/4MS_Landscape_modeling/Landscape_modeling/")
+```
+## GIS metrics
+```{r, echo=FALSE}
+## This chunk will take some time to run, please load saved metric.df.76.csv if needed.
+
+##### load 64 logged sites
+all.sites <- readOGR("../GIS/76points.shp")
+
+##### load mature forests in landscape
+mature.forests <- readOGR("../GIS/mature.shp")
+
+##### load rasterized mature forests
+mature.ras <- raster("../GIS/mature_ras_10.grd")
+mature.ras <- as.factor(mature.ras)
+land_cover <- levels(mature.ras)[[1]]
+land_cover[, "landcover"] <- c("mature")
+levels(mature.ras) <- land_cover
+land_col <- c("dark green")
+# levelplot(mature.ras, col.regions=land_col)
+#####
+uni.type <- unique(mature.ras)
+uni.mature <- c(1)
+reclass.mature <- cbind(uni.type, uni.mature)
+mature.ras <- reclassify(mature.ras, reclass.mature)
+# plot(mature.ras)
+
+##### create an empty dataframe to store output metrics
+metric.df <- data.frame(site = character(76),  # site ID
+                        # TA.vec = integer(76), # total area (TA.vec) of buffered mature forest in vector layer
+                       # LC.vec = integer(76), # landscape context (LC.vec) in vector layer
+                       # FI.vec = integer(76), # forest influence (FI.vec) to mature forest
+                       # TA.ras = integer(76),
+                       # LC.ras = integer(76),
+                      #  FI.ras = integer(76),
+                      #  TE.ras = integer(76),
+                        stringsAsFactors = FALSE)
+
+##### calculate landscape metrics within 1km radius for 76 logged sites
+for (n in 1:76) {
+  ##### site ID
+  metric.df$site[n] <- as.character(all.sites[n,]$ID)
+  ##### create 1km radius buffer at each site
+  buffer.forest.1km <- buffer(all.sites[n,], width = 1000)
+  ##### crop buffered vector mature forests at each site
+  crop.forest.1km <- crop(mature.forests, buffer.forest.1km)
+  ##### total area (TA1) of buffered mature forests
+  TA.vec  <- gArea(crop.forest.1km)
+  metric.df$TA.vec[n] <- TA.vec
+  ##### Landscape context (LC1) percentage of mature forest cover
+  metric.df$LC.vec[n] <- metric.df$TA.vec[n]*100/area(buffer.forest.1km)
+  ##### Forest influence (i.e., nearest distance) to mature forests
+  FI.vec <- min(gDistance(all.sites[n,], crop.forest.1km, byid = TRUE))
+  metric.df$FI.vec[n] <- FI.vec
+  
+#####################################################
+##### raster layer
+crop.ras.1km <- crop(mature.ras, buffer.forest.1km)
+crop.ras.NA.1km <- setValues(crop.ras.1km, NA)
+buffer.ras.1km <- rasterize(buffer.forest.1km, crop.ras.NA.1km)
+buffered.ras.1km <- raster::mask(crop.ras.1km, buffer.ras.1km)
+##### contiguity score
+metric.df$CS.ras[n] <- (lsm_c_contig_mn(buffered.ras.1km))[[6]]
+##### splitting index
+metric.df$SI.ras[n] <- (lsm_c_split(buffered.ras.1km))[[6]]
+#####
+ras.polygon.1km <- rasterToPolygons(buffered.ras.1km)
+##
+for.cstat.1km <- ClassStat(buffered.ras.1km, cellsize = res(buffered.ras.1km)[[1]])
+metric.df$TE.ras[n] <- for.cstat.1km$total.area
+metric.df$prop.landscape[n] <- for.cstat.1km$prop.landscape
+metric.df$patch.density[n] <- for.cstat.1km$patch.density
+metric.df$total.edge[n] <- for.cstat.1km$total.edge
+metric.df$edge.density[n] <- for.cstat.1km$edge.density
+metric.df$landscape.shape.index[n] <- for.cstat.1km$landscape.shape.index
+metric.df$largest.patch.index[n] <- for.cstat.1km$largest.patch.index
+metric.df$mean.patch.area[n] <- for.cstat.1km$mean.patch.area
+metric.df$max.patch.area[n] <- for.cstat.1km$max.patch.area
+metric.df$perimeter.area.frac.dim[n] <- for.cstat.1km$perimeter.area.frac.dim
+metric.df$mean.perim.area.ratio[n] <- for.cstat.1km$mean.perim.area.ratio
+metric.df$max.perim.area.ratio[n] <- for.cstat.1km$max.perim.area.ratio
+metric.df$mean.shape.index[n] <- for.cstat.1km$mean.shape.index
+metric.df$max.shape.index[n] <- for.cstat.1km$max.shape.index
+metric.df$mean.frac.dim.index[n] <- for.cstat.1km$mean.frac.dim.index
+metric.df$max.frac.dim.index[n] <- for.cstat.1km$max.frac.dim.index
+metric.df$total.core.area[n] <- for.cstat.1km$total.core.area
+metric.df$prop.landscape.core[n] <- for.cstat.1km$prop.landscape.core
+metric.df$mean.patch.core.area[n] <- for.cstat.1km$mean.patch.core.area
+metric.df$max.patch.core.area[n] <- for.cstat.1km$max.patch.core.area
+metric.df$prop.like.adajacencies[n] <- for.cstat.1km$prop.like.adjacencies
+metric.df$aggregation.index[n] <- for.cstat.1km$aggregation.index
+metric.df$landscape.division.index[n] <- for.cstat.1km$lanscape.division.index
+metric.df$splitting.index[n] <- for.cstat.1km$splitting.index
+metric.df$effective.mesh.size[n] <- for.cstat.1km$effective.mesh.size
+metric.df$patch.cohesion.index[n] <- for.cstat.1km$patch.cohesion.index
+
+  print(n)
+}
+
+metric.df$site <- gsub("s", "site", metric.df$site)
+
+## save metric.df
+write.csv(metric.df,"metric.df.76.csv")
+
+##### plot distance against proportion of mature forest within 1km radius buffer
+p1 <- ggplot(metric.df, aes(FI.vec, LC.vec)) + geom_point(size=4) + theme_bw() +
+            labs(title="Forest influence and landscape context of the study sites") +
+            xlab("Distance to nearest mature forest within 1 km radius buffer (m)") +
+            ylab("Proportion of mature forest within 1 km radius buffer (%)") +
+            theme(panel.grid.minor = element_line(colour = "white"), panel.border = element_rect(size=2))
+
+p1 <- p1 + scale_x_continuous(breaks=c(0, 125, 250, 375, 500))
+
+p1
+
+```
+## load metrics
+```{r}
+## load saved metric.df.76.csv from last chunk
+metric.df.76 <- read.csv("../Analysis_v3/metric.df.76.csv", header = TRUE, sep=",", stringsAsFactors = TRUE, row.names = 1)
+
+site.info <- read.csv("../Site_info/Sites_info.csv", header = TRUE, sep=",", stringsAsFactors = TRUE, row.names = 1)
+
+site.info$site <- row.names(site.info)
+
+metrics.df.site.info <- merge(metric.df.76, site.info, by="site", all=TRUE)
+
+row.names(metrics.df.site.info) <- metrics.df.site.info[,1]
+
+## rescale landscape context and forest influence
+## metrics.df.site.info$LC.vec.res <- rescale(metrics.df.site.info$LC.vec)
+
+## metrics.df.site.info$FI.vec.res <- rescale(max(metrics.df.site.info$FI.vec) - metrics.df.site.info$FI.vec)
+
+## metrics.df.site.info$LCFI.vec.res <- (metrics.df.site.info$LC.vec.res + metrics.df.site.info$FI.vec.res)
+```
+## env variables
+```{R}
+## This chunk is to extract env variables with coordinates of points.
+## Points are read as a shapefile.
+## Raster files are provided by Dario.
+## Shapefiles (soils and TASveg) can also be used but variable values are not extracted with extract{raster}. Instead, it uses st_join{sf}.
+
+## create an empty data.frame to store env variables
+df.var <- data.frame(site = character(76))
+
+## library(sf)
+## library(raster)
+
+## read points
+points.76 <- read_sf("../GIS/76points.shp")
+df.var$site <- points.76$ID
+df.var$lat <- points.76$x_coord
+df.var$long <- points.76$y_coord
+
+#### slope ####
+slope <- raster("../Analysis_v3/env/slope_gda94_zone55.tif")
+slope.ext <- raster::extract(slope, points.76)
+df.var$slope <- slope.ext
+
+#### aspect - eastness ####
+eastness <- raster("../Analysis_v3/env/eastness_gda94_zone55.tif")
+eastness.ext <- raster::extract(eastness, points.76)
+df.var$eastness <- eastness.ext
+
+#### aspect - northness ####
+northness <- raster("../Analysis_v3/env/northness_gda94_zone55.tif")
+northness.ext <- raster::extract(northness, points.76)
+df.var$northness <- northness.ext
+
+#### elevation ####
+elevation <- raster("../Analysis_v3/env/DEM_23m_wgs84.tif")
+elevation.ext <- raster::extract(elevation, points.76)
+df.var$elevation <- elevation.ext
+
+#### roughness ####
+## sliding window of 3 x 3 cell elevation index
+## https://www.rdocumentation.org/packages/raster/versions/3.1-5/topics/terrain
+roughness <- raster("../Analysis_v3/env/roughness_gda94_zone55.tif")
+roughness.ext <- raster::extract(roughness, points.76)
+df.var$roughness <- roughness.ext
+
+#### TPI ####
+TPI <- raster("../Analysis_v3/env/TPI_gda94_zone55.tif")
+TPI.ext <- raster::extract(TPI, points.76)
+df.var$TPI <- TPI.ext
+
+#### TRI ####
+TRI <- raster("../Analysis_v3/env/TRI_gda94_zone55.tif")
+TRI.ext <- raster::extract(TRI, points.76)
+df.var$TRI <- TRI.ext
+
+#### soils ####
+## use st_join to extract shapefile values with shapefile points
+## soils <- read_sf("../Analysis_v1/env/dominant_soil_orders_EPSG_28355.shp")
+## transform CRS projection to points as soils shapefile
+## points.crs.soils <- st_transform(points.76, crs = st_crs(soils))
+## Note: st_join function requires points on top of the shapefile from which values are extracted
+## soils.ext <- st_join(points.crs.soils, soils)
+## soils variables haven't added to df.var, look up metadata to decide which ones are useful; also note soil variables include non-numeric
+
+#### TASveg ####
+## refer to "soils"
+## TASveg <- read_sf("../Analysis_v1/env/TASVEG_3_0.shp")
+## points.crs.TASveg <- st_transform(points.76, crs = st_crs(TASveg))
+## TASveg.ext <- st_join(points.crs.TASveg, TASveg)
+
+#### bioclim ####
+## resolution of bioclim is 1km, too coarse for my study area
+## list 19 bioclim tif files
+list.bioclim <- list.files("../Analysis_v3/env/Bioclimate/", pattern = ".tif$", full.names = TRUE)
+
+## stack 19 bioclim raster files for extraction
+bioclim <- raster::stack(list.bioclim)
+
+bioclim.19 <- raster::extract(bioclim, points.76)
+
+## combine 19 bioclim into df.var
+df.var <- cbind(df.var, bioclim.19)
+
+#### PCNM ####
+## PCNM of 76 sites
+points.76.coord <- cbind(points.76$x_coord, points.76$y_coord)
+
+points.76.coord.scale <- scale(points.76.coord, scale = FALSE)
+
+## pcnm{vegan}
+pcnm.points.76 <- pcnm(dist(points.76.coord.scale))
+
+## positive pcnm variables are stored in vectors
+pcnm.points.76 <- pcnm.points.76$vectors
+
+## plot a map showing PCNM in the landscape
+ordisurf(points.76.coord, scores(pcnm.points.76, choices = 42), bubble = 4, main = "PCNM 42")
+
+## Visual Interpretation of PCNM (https://casoilresource.lawr.ucdavis.edu/software/r-advanced-statistical-package/working-spatial-data/visual-interpretation-principal-coordinates-neighbor-matrices-pcnm/)
+
+
+### s.value(points.76.coord.scale[,c(1,2)], pcnm.points.76[,i], clegend=0, sub=paste("PCNM", i), csub=1.5, addaxes=FALSE, origin=c(1,1))
+
+df.var <- cbind(df.var, pcnm.points.76)
+
+## change the site names to start with sitexxx
+df.var$site <- gsub("s", "site", df.var$site)
+
+## merge metrics + site.info + env var
+metrics.site.info.env <- merge(metrics.df.site.info, df.var, by="site", all=TRUE)
+
+rownames(metrics.site.info.env) <- metrics.site.info.env$site
+
+###  correction for x-axis in PCNM to that in I-splines in GDM
+
+metrics.64site <- metrics.site.info.env %>% dplyr::filter(!grepl("0000", site))
+
+s.value(scale(metrics.64site[, c(38,39)], scale=FALSE), metrics.64site$PCNM42, clegend=0, sub=paste("PCNM", 42), csub=1.5, addaxes=FALSE, origin=c(1,1))
+
+```
+##spp&comm data
+```{r, echo=FALSE}
+set.seed(123456)
+
+ZOTUS.COI <- read.csv("../Analysis_v3/zotutab_lulu_CO1.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE, row.names = 1)
+
+ZOTUS_common <- read.csv("../Analysis_v3/zotu_common.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE, row.names = 1)
+
+ZOTUS.76sites <- merge(ZOTUS_common, ZOTUS.COI, by=0, all=TRUE)
+
+ZOTUS.76sites <- ZOTUS.76sites %>% tidyr::drop_na()
+
+rownames(ZOTUS.76sites) <- ZOTUS.76sites$Row.names
+
+ZOTUS.76sites <- ZOTUS.76sites %>% dplyr::select(starts_with("site"))
+
+ZOTUS.76sites <- as.data.frame(t(ZOTUS.76sites))
+
+##
+TotalCounts <- c(colSums(ZOTUS.76sites))
+
+tdt = data.table(colnames(ZOTUS.76sites), TotalCounts = colSums(ZOTUS.76sites), OTU = colnames(ZOTUS.76sites))
+
+# ggplot(tdt, aes(TotalCounts)) + geom_histogram() + ggtitle("Histogram of Total Counts")
+
+tdt[(TotalCounts <= 0), .N]
+
+tdt[(TotalCounts <= 1), .N]
+
+tdt[(TotalCounts <= 2), .N]
+
+taxcumsum = tdt[, .N, by = TotalCounts]
+
+setkey(taxcumsum, TotalCounts)
+
+taxcumsum[, CumSum := cumsum(N)]
+
+pCumSum = ggplot(taxcumsum, aes(TotalCounts, CumSum)) + geom_point() + xlab("Cumulative Total Counts") +
+  ylab("Cumulative ZOTUs")
+
+pCumSum + xlim(0, 200) + ylim(0, 200)
+
+## keep reads = 1, no remove
+ZOTUS.76sites.rm0 <- ZOTUS.76sites
+
+## remove Zotus with 0 reads
+ZOTUS.76sites.rm0 <- ZOTUS.76sites.rm0[, which(colSums(ZOTUS.76sites.rm0) >= 75)]
+
+ZOTUS.76sites.rm0 <- data.frame(rrarefy(ZOTUS.76sites.rm0, sample = min(rowSums(ZOTUS.76sites.rm0))))
+
+ZOTUS.76sites.rm0[ZOTUS.76sites.rm0 < 5 ] <- 0
+ZOTUS.76sites.rm0[ZOTUS.76sites.rm0 > 1 ] <- 1
+
+ZOTUS.76sites.rm0 <- ZOTUS.76sites.rm0[, which(colSums(ZOTUS.76sites.rm0) >= 1)]
+
+ZOTUS.76sites.rm0$site <- row.names(ZOTUS.76sites.rm0)
+
+## combine into comm data 76 sites, i.e., including metrics
+comm.76sites.rm0 <- merge(ZOTUS.76sites.rm0, metrics.site.info.env, by="site", all=TRUE)
+## set row names by site ID
+row.names(comm.76sites.rm0) <- comm.76sites.rm0$site
+
+comm.64sites.rm0 <- comm.76sites.rm0 %>% dplyr::filter(!grepl("0000", site))
+
+## subset only spp data 76 sites
+spp.76sites.rm0 <- comm.76sites.rm0 %>% dplyr::select(starts_with("Zotu"))
+```
+##MDS for 76.sites.rm0
+```{r}
+set.seed(123456)
+
+dist.76sites.rm0 <- metaMDS(spp.76sites.rm0[,1:ncol(spp.76sites.rm0)], distance = "jaccard", try =20, trymax = 500, autotransform = FALSE)
+
+points.dist.76sites.rm0 <- as.data.frame(dist.76sites.rm0$points)
+
+p1.dist.76sites.rm0 <- ggplot(points.dist.76sites.rm0, aes(MDS1, MDS2)) + geom_point(aes(size = 6, shape=factor(comm.76sites.rm0$class2))) + scale_shape_manual(values=c(1:5))
+
+p1.dist.76sites.rm0
+
+##
+cols <- c("light green", "purple", "orange", "black", "blue")
+
+pchs <- c(0,12,2,6,1)
+
+plot.class2 <- factor(comm.76sites.rm0$class2)
+
+plot(dist.76sites.rm0, type = "n", display = "sites")
+
+points(dist.76sites.rm0, display = "sites", pch = pchs[plot.class2], col = cols[plot.class2], cex = 1.5, lwd=2)
+
+ordiellipse(dist.76sites.rm0, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 1, col = "light green", border = "light green", alpha = 20, lwd=2)
+
+ordiellipse(dist.76sites.rm0, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 2, col = "purple", border = "purple", alpha = 20, lwd=2)
+
+ordiellipse(dist.76sites.rm0, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 3, col = "orange", border = "orange", alpha = 20, lwd=2)
+
+ordiellipse(dist.76sites.rm0, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 4, col = "black", border = "black", alpha = 20, lwd=2)
+
+ordiellipse(dist.76sites.rm0, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 5, col = "blue", border = "blue", alpha = 20, lwd=2)
+```
+## capscale
+```{r}
+#### dbRDA for forest age ####
+set.seed(123456)
+
+spp.mod.age <- capscale(spp.76sites.rm0 ~ metrics.site.info.env$regenyear, metrics.site.info.env, distance = "jaccard", add = TRUE)
+
+anova(spp.mod.age, by="term", permutations = 9999)
+
+#cols <- c("light green", "purple", "orange", "black", "blue")
+
+cols <- c( "purple", "orange", "black", "blue")
+
+pchs <- c(12,2,6,1)
+
+#pchs <- c(0,12,2,6,1)
+
+plot.class2 <- factor(comm.76sites.rm0$age_class)
+
+plot(spp.mod.age, type = "n", display = "sites", xlim=c(-3,3), ylim=c(-2,2)) + points(spp.mod.age, display = "sites", pch = pchs[plot.class2], col = cols[plot.class2], cex=1.5, lwd=2)
+
+ordiellipse(spp.mod.age, as.integer(comm.76sites.rm0$age_class), draw = "polygon", show.groups = 1, col = "light green", border = "light green", alpha = 20, lwd=2)
+
+ordiellipse(spp.mod.age, as.integer(comm.76sites.rm0$age_class), draw = "polygon", show.groups = 2, col = "purple", border = "purple", alpha = 20, lwd=2)
+
+ordiellipse(spp.mod.age, as.integer(comm.76sites.rm0$age_class), draw = "polygon", show.groups = 3, col = "orange", border = "orange", alpha = 20, lwd=2)
+
+ordiellipse(spp.mod.age, as.integer(comm.76sites.rm0$age_class), draw = "polygon", show.groups = 4, col = "black", border = "black", alpha = 20, lwd=2)
+
+ordiellipse(spp.mod.age, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 5, col = "blue", border = "blue", alpha = 20, lwd=2)
+
+#### dbRDA for forest class ####
+set.seed(123456)
+
+spp.mod.class <- capscale(spp.76sites.rm0 ~ metrics.site.info.env$class2, metrics.site.info.env, distance = "jaccard", add = TRUE)
+
+anova(spp.mod.class, by="term", permutations = 9999)
+
+##
+cols <- c("light green", "purple", "orange", "black", "blue")
+
+pchs <- c(0,12,2,6,1)
+
+plot.class2 <- factor(comm.76sites.rm0$class2)
+
+plot(spp.mod.class, type = "n", display = "sites", xlim=c(-3,3), ylim=c(-3,3)) + points(spp.mod.class, display = "sites", pch = pchs[plot.class2], col = cols[plot.class2], cex=1.5, lwd=2)
+
+ordiellipse(spp.mod.class, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 1, col = "light green", border = "light green", alpha = 20, lwd=2)
+
+ordiellipse(spp.mod.class, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 2, col = "purple", border = "purple", alpha = 20, lwd=2)
+
+ordiellipse(spp.mod.class, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 3, col = "orange", border = "orange", alpha = 20, lwd=2)
+
+ordiellipse(spp.mod.class, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 4, col = "black", border = "black", alpha = 20, lwd=2)
+
+ordiellipse(spp.mod.class, as.integer(comm.76sites.rm0$class2), draw = "polygon", show.groups = 5, col = "blue", border = "blue", alpha = 20, lwd=2)
+
+#####
+
+#### dbRDA for forest class_LC20_FI6 ####
+set.seed(123456)
+
+spp.mod.class.LC20.FI6 <- capscale(spp.76sites.rm0 ~ metrics.site.info.env$class_LC20_FI6, metrics.site.info.env, distance = "jaccard", add = TRUE)
+
+anova(spp.mod.class.LC20.FI6, by="term", permutations = 9999)
+
+cols.LC20.FI6 <- c("light green", "grey", "orange", "black","dark green", "purple", "dark orange", "light blue","blue")
+
+pchs <- c(0,12,2,6,11,5,9,10,1)
+
+plot.class.LC20.FI6 <- factor(comm.76sites.rm0$class_LC20_FI6)
+
+plot(spp.mod.class.LC20.FI6, type = "n", display = "sites", xlim=c(-3,3), ylim=c(-3,3)) + points(spp.mod.class.LC20.FI6, display = "sites", pch = pchs[plot.class.LC20.FI6], col = cols.LC20.FI6[plot.class.LC20.FI6], cex=1.5, lwd=2)
+
+points(spp.mod.class.LC20.FI6, display = "sites", pch = 19, col = cols.LC20.FI6[plot.class.LC20.FI6], cex=1.5)
+
+ordiellipse(spp.mod.class.LC20.FI6, as.integer(comm.76sites.rm0$class_LC20_FI6), draw = "polygon", show.groups = 1, col = "light green", border = "light green", alpha = 20, lwd=1.5)
+
+ordiellipse(spp.mod.class.LC20.FI6, as.integer(comm.76sites.rm0$class_LC20_FI6), draw = "polygon", show.groups = 2, col = "grey", border = "grey", alpha = 20)
+
+ordiellipse(spp.mod.class.LC20.FI6, as.integer(comm.76sites.rm0$class_LC20_FI6), draw = "polygon", show.groups = 3, col = "orange", border = "orange", alpha = 20, lwd=1.5)
+
+ordiellipse(spp.mod.class.LC20.FI6, as.integer(comm.76sites.rm0$class_LC20_FI6), draw = "polygon", show.groups = 4, col = "black", border = "black", alpha = 20)
+
+ordiellipse(spp.mod.class.LC20.FI6, as.integer(comm.76sites.rm0$class_LC20_FI6), draw = "polygon", show.groups = 5, col = "dark green", border = "dark green", alpha = 20)
+
+ordiellipse(spp.mod.class.LC20.FI6, as.integer(comm.76sites.rm0$class_LC20_FI6), draw = "polygon", show.groups = 6, col = "purple", border = "purple", alpha = 20)
+
+ordiellipse(spp.mod.class.LC20.FI6, as.integer(comm.76sites.rm0$class_LC20_FI6), draw = "polygon", show.groups = 7, col = "dark orange", border = "dark orange", alpha = 20)
+
+ordiellipse(spp.mod.class.LC20.FI6, as.integer(comm.76sites.rm0$class_LC20_FI6), draw = "polygon", show.groups = 8, col = "light blue", border = "light blue", alpha = 20)
+
+ordiellipse(spp.mod.class.LC20.FI6, as.integer(comm.76sites.rm0$class_LC20_FI6), draw = "polygon", show.groups = 9, col = "blue", border = "blue", alpha = 20)
+```
+## GDM
+```{r}
+#### GDM 64 sites ####
+gdm.spp.64sites <- spp.76sites.rm0 %>% dplyr::filter(!grepl("0000", rownames(spp.76sites.rm0)))
+
+gdm.spp.64sites <- gdm.spp.64sites[ order(row.names(gdm.spp.64sites)), ]
+
+#### full.64.pcnm
+full.pcnm.64 <- metrics.site.info.env %>% dplyr::select(contains("PCNM"))
+
+full.pcnm.64 <- full.pcnm.64 %>% dplyr::filter(!grepl("0000", rownames(full.pcnm.64)))
+
+#### 64 site + lat + long ####
+site.64.coord <- metrics.site.info.env[c("site", "lat", "long")]
+
+site.64.coord <- site.64.coord %>% filter(!grepl("0000", site))
+
+site.64.coord <- site.64.coord[ order(row.names(site.64.coord)), ]
+
+gdm.spp.64sites <- cbind(gdm.spp.64sites, site.64.coord)
+
+## plot a map showing PCNM in the landscape
+ordisurf(site.64.coord[,2:3], scores(full.pcnm.64, choices = 32), bubble = 4, main = "PCNM 32")
+
+set.seed(123456)
+
+#### env ####
+full.env.variables <- metrics.site.info.env %>% dplyr::select(!contains(c("PCNM", "class" )))
+
+full.env.variables <- full.env.variables %>% dplyr::filter(!grepl("0000", rownames(full.env.variables)))
+
+gdm.env <- full.env.variables
+
+## gdm.env$site <- row.names(gdm.env)
+
+gdm.env <- gdm.env[ order(row.names(gdm.env)), ]
+
+#### env + PCNMs ####
+gdm.env.full.PCNM <- cbind(full.env.variables, full.pcnm.64)
+
+gdm.env.full.PCNM$site <- row.names(gdm.env.full.PCNM)
+
+gdm.env.full.PCNM <- gdm.env.full.PCNM[ order(row.names(gdm.env.full.PCNM)), ]
+
+set.seed(123456)
+
+## response data must have columns of site, latitude, longitude
+## predicotr data must have a colunm of site
+#### gdm.env ####
+gdm.env.format <- formatsitepair(gdm.spp.64sites, 1, siteColumn = "site", XColumn = "lat", YColumn = "long", predData = gdm.env)
+
+gdm.env.mod <- gdm(gdm.env.format, geo=T)
+
+#### gdm.env.full.PCNM ####
+gdm.env.full.PCNM.format <- formatsitepair(gdm.spp.64sites, 1, siteColumn = "site", XColumn = "lat", YColumn = "long", predData = gdm.env.full.PCNM)
+
+gdm.env.full.PCNM.mod <- gdm(gdm.env.full.PCNM.format, geo=T)
+
+#### plot GDM 64 sites ####
+gdmTabMod.64.spline <- isplineExtract(gdm.env.full.PCNM.mod)
+
+relative.importance.64 <- as.data.frame(gdmTabMod.64.spline$y)
+
+colMax <- function(data) sapply(data, max, na.rm = TRUE)
+
+max.relative.importance.64 <- colMax(relative.importance.64)
+
+df.relative.importance.64 <- as.data.frame(sort(max.relative.importance.64))
+
+df.relative.importance.64 <- df.relative.importance.64 %>% dplyr::filter(sort(max.relative.importance.64) > 0)
+
+write.csv(df.relative.importance.64, "df.relative.importance.64.csv", row.names = TRUE)
+
+gdm.plot.relative.importance = read.csv("df.relative.importance.64.csv")
+
+gdm.plot.relative.importance <- setNames(as.numeric(sort(gdm.plot.relative.importance$sort.max.relative.importance.64.)), gdm.plot.relative.importance$X)
+
+par(mfrow=c(1,1),mar=c(3,8,1,1),mgp=c(1,0.5,0))
+
+max(gdm.plot.relative.importance)
+
+barplot(gdm.plot.relative.importance[2:length(gdm.plot.relative.importance)], xlim=c(0, 1.4),cex.names=0.8,cex.axis=0.6,horiz=TRUE,las=1,space=0.5,font=2,xaxt="n")
+
+axis(1,at=c(0,0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4),cex.axis=1,las=1)
+
+mtext(expression("Relative importance"),side=1,line=2,cex=1)
+
+# text(0.48,20.5,"(a)",cex=1)
+abline(v=0) # add line along bottom of plot
+
+####
+perc.relative.imp.full <- gdm.plot.relative.importance/sum(gdm.plot.relative.importance)
+
+par(mfrow=c(1,1),mar=c(3,8,1,1),mgp=c(3,0.5,0))
+
+barplot(perc.relative.imp.full[2:length(perc.relative.imp.full)], xlim=c(0, 0.1),cex.names=0.6,cex.axis=0.6,horiz=TRUE,las=1,space=0.5,font=3,xaxt="n")
+
+axis(1,at=c(0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08,0.09, 0.1),cex.axis=1,las=1)
+
+mtext(expression("Percentage of relative importance"),side=1,line=2,cex=1)
+
+# text(0.48,20.5,"(a)",cex=1)
+abline(v=0) # add line along bottom of plot
+
+```
